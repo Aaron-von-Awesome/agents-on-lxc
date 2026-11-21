@@ -1,0 +1,106 @@
+# Agents on LXC
+
+Deploy Hermes Agent or ZeroClaw in an LXD container with pyinfra, using the Ubuntu LXD snap. Run on the LXD host, from this folder.
+
+```bash
+uv sync
+AGENT_VARIANT=hermes/hermius-maximus uv run pyinfra @local launch.py
+AGENT_VARIANT=hermes/hermius-maximus uv run pyinfra inventory.py hermes/deploy.py
+
+AGENT_VARIANT=zeroclaw/zeroius-clawius uv run pyinfra @local launch.py
+AGENT_VARIANT=zeroclaw/zeroius-clawius uv run pyinfra inventory.py zeroclaw/deploy.py
+```
+
+- `AGENT_VARIANT` is `<agent>/<name>`, a file in `<agent>/variants/` (without `.py`). For a new variant, copy a file and change `CONTAINER` and `DASHBOARD_PORT` (both must be unique across variants).
+- Stage 1 (`launch.py`) creates/starts the container and opens SSH + dashboard access, and installs the Helix editor (classic snap). Stage 2 (`<agent>/deploy.py`) installs and configures the agent over SSH.
+- Both deploys ask for the llama.cpp API key, or read it from `LLAMA_API_KEY`.
+- Add `--dry` to preview the changes. Never add `--diff`: either deploy aborts rather than print the API-key file. Add `--data chat_test=true` to force the chat test.
+- Tests: `uv run pytest` (no LXD needed).
+- If stage 2 stops with an SSH host-key mismatch, clear the stale entry for the container IP: `ssh-keygen -R <container-ip>`.
+
+## Hermes
+
+### Toolsets, plugins and extras
+
+`hermes/defaults.py` sets these for every variant (`from hermes.defaults import *`); a variant can reassign one after that line. Stage 2 writes them to `config.yaml` on every run, so edits made in `hermes tools` or the dashboard are reset.
+
+- `ENABLED_PLATFORM_TOOLSETS`: dict of platform → toolset allow-list, written as `platform_toolsets.<platform>` (today `cli` and `api_server`). A platform left out uses Hermes' broad default. Removing a platform from the dict does not delete its existing `config.yaml` entry.
+- `DISABLED_TOOLSETS`: `agent.disabled_toolsets`, removed on every platform, even if a platform list includes them.
+- `PLUGINS_ENABLED`: `plugins.enabled`. Third-party plugins load only when listed here.
+- `PLUGINS_DISABLED`: `plugins.disabled`. Bundled backend and platform plugins load without being enabled, so this list keeps them off; it wins over `PLUGINS_ENABLED`. Hermes has no wildcard. After `hermes update`, list new bundled ones with:
+
+  ```bash
+  cd hermes-agent/plugins && grep -lE '^kind: (backend|platform)' */*/plugin.yaml | xargs -n1 dirname
+  ```
+- `PM_EXTRAS`: optional Hermes Python extras, installed with `hermes pm install --extra <name>`. Empty by default. Extras are install-wide, so every profile in the container gets them; `--profile` does not narrow that. Example: `PM_EXTRAS = ["anthropic"]` for a profile that uses the Anthropic provider. Removing a name does not uninstall it.
+- `MOA_ENABLED`: Mixture of Agents. Stage 2 points the `default` preset at the variant's `MODEL` (advisor and aggregator), replacing Hermes' cloud-model default. `False` (default) turns the advisors off, so selecting the preset runs `MODEL` alone.
+- `CLAUDE_CODE`: `True` runs the Claude Code installer (`CLAUDE_CODE_INSTALL_URL`) once, as `SSH_USER`, into `~/.local/bin/claude`. Off by default. Log in afterwards in the container with `claude`; turning it off does not uninstall it.
+
+## ZeroClaw
+
+Settings live in `zeroclaw/defaults.py`; a variant reassigns them after `from zeroclaw.defaults import *`.
+
+- `RISK_LEVEL`: `"supervised"`.
+- `AUTO_APPROVE`: `["shell", "file_read", "file_write", "file_edit", "glob_search", "content_search", "memory_recall", "memory_store"]`. Tools that run without asking; `workspace_only` still confines writes to the workspace.
+- `ALLOWED_COMMANDS`: `["uname"]`. Strict allow-list: the shell tool runs only these.
+- `WEB_SEARCH_ENABLED`: `False`.
+- The tool test (`zeroclaw agent` runs `uname -a`) passes only because of `AUTO_APPROVE` + `ALLOWED_COMMANDS`. Change either and it fails.
+
+Pair a browser (run in the container):
+
+```bash
+zeroclaw gateway get-paircode
+```
+
+Never set `require_pairing = false`.
+
+Logs:
+
+```bash
+journalctl --user -u zeroclaw
+```
+
+- Settings are applied via `zeroclaw config set` and restart the service, then stamped in `~/.zeroclaw/.deploy-settings`. Delete the stamp to force a re-apply and restart.
+- The API key is written only on the first run, to `~/.zeroclaw/config.toml` (mode 600). To rotate: delete `config.toml` (also drops browser pairings), or run `zeroclaw config set` interactively in the container, then `systemctl --user restart zeroclaw`.
+- A container previously deployed as Hermes on the same `DASHBOARD_PORT` still has `hermes-dashboard` holding the port; run `lxc delete --force <container>` before the first ZeroClaw deploy.
+
+## Container can't reach the internet
+
+If the LXC cannot connect to the internet, stage 2 fails like this:
+
+    [10.98.171.146] curl: (28) Failed to connect to hermes-agent.nousresearch.com port 443 after 133407 ms: Could not connect to server
+    [10.98.171.146] Error: executed 0 commands
+
+Run these on the host to allow traffic from `lxdbr0` and its replies through Docker's `DOCKER-USER` chain:
+
+```bash
+sudo iptables -I DOCKER-USER -i lxdbr0 -j ACCEPT
+sudo iptables -I DOCKER-USER -o lxdbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+```
+
+The rules don't survive a host reboot. Re-run them, or persist with:
+
+```bash
+sudo mkdir -p /etc/iptables
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
+
+Then restore them at boot with `/etc/systemd/system/iptables-restore.service`:
+
+```ini
+[Unit]
+Description=Restore iptables rules
+Before=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/iptables-restore /etc/iptables/rules.v4
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now iptables-restore.service
+```
