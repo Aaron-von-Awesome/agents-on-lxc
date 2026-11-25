@@ -40,6 +40,11 @@ def load_variant(spec: str | None, root: Path) -> dict[str, object]:
     agent, name = spec.split("/")
     path = root / agent / "variants" / f"{name}.py"
     values = {k: v for k, v in runpy.run_path(str(path)).items() if k.isupper()}
+    if "DASHBOARD_PORT" in values and not values.get("PROXY_DEVICE"):
+        raise RuntimeError(
+            f"{spec} sets DASHBOARD_PORT but not PROXY_DEVICE; "
+            "the dashboard proxy device needs a name"
+        )
     for other in sorted(paths):
         if other == path:
             continue

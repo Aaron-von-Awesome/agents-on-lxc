@@ -345,3 +345,34 @@ def test_port_free():
     assert not helpers.port_free(port)
     s.close()
     assert helpers.port_free(port)
+
+
+def test_port_conflict_other_container_owns_port():
+    cs = [
+        {"name": "a", "devices": {"dashboard": {"type": "proxy", "listen": "tcp:127.0.0.1:9119"}}}
+    ]
+    assert (
+        helpers.port_conflict(cs, "b", 9119)
+        == "Port 9119 is already used by container a; pick another DASHBOARD_PORT"
+    )
+
+
+def test_port_conflict_own_proxy_is_not_a_conflict():
+    # The regression: our own LXD proxy device holds the host port while the
+    # container runs. A re-run must not treat that as a conflict.
+    cs = [
+        {"name": "b", "devices": {"dashboard": {"type": "proxy", "listen": "tcp:127.0.0.1:9119"}}}
+    ]
+    assert helpers.port_conflict(cs, "b", 9119) is None
+
+
+def test_port_conflict_host_listener_and_free_port():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    assert (
+        helpers.port_conflict([], "b", port)
+        == f"Port {port} is already used on this host; pick another DASHBOARD_PORT"
+    )
+    s.close()
+    assert helpers.port_conflict([], "b", port) is None

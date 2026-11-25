@@ -9,7 +9,7 @@ from pyinfra.api import QuoteString, StringCommand
 from pyinfra.facts.files import File
 from pyinfra.operations import files, server, systemd
 
-from helpers import chat_test_wanted, check_api_key, preflight, wait_for_url
+from helpers import chat_test_wanted, check_api_key, enable_linger, preflight, wait_for_url
 import settings
 from settings import (
     BASE_URL,
@@ -99,12 +99,7 @@ if host.get_fact(File, path=f"{HOME}/.config/systemd/user/{UNIT}") is None:
     )
 
 # Linger starts the user manager at boot, so the gateway runs without a login.
-if host.get_fact(File, path=f"/var/lib/systemd/linger/{SSH_USER}") is None:
-    server.shell(
-        name="Enable linger",
-        commands=[StringCommand("loginctl enable-linger", QuoteString(SSH_USER))],
-        _sudo=True,
-    )
+enable_linger(SSH_USER)
 
 systemd.service(
     name="Enable and start ZeroClaw",

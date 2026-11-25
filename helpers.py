@@ -6,7 +6,10 @@ import urllib.request
 from pathlib import Path
 from typing import Literal
 
+from pyinfra import host
 from pyinfra.api import QuoteString, StringCommand
+from pyinfra.facts.files import File
+from pyinfra.operations import server
 
 
 def lxc_list() -> list[dict]:
@@ -60,6 +63,16 @@ def wait_for_url(port: int, path: str) -> StringCommand:
         "> /dev/null && exit 0;",
         "sleep 3; done; exit 1",
     )
+
+
+def enable_linger(ssh_user: str) -> None:
+    # Linger starts the user manager at boot, so user services run without a login.
+    if host.get_fact(File, path=f"/var/lib/systemd/linger/{ssh_user}") is None:
+        server.shell(
+            name="Enable linger",
+            commands=[StringCommand("loginctl enable-linger", QuoteString(ssh_user))],
+            _sudo=True,
+        )
 
 
 def chat_test_wanted(install, host_data) -> bool:
@@ -190,6 +203,18 @@ def port_owner(containers: list[dict], port: int, exclude: str) -> str | None:
         ),
         None,
     )
+
+
+def port_conflict(containers: list[dict], name: str, port: int) -> str | None:
+    owner = port_owner(containers, port, name)
+    if owner is not None:
+        return f"Port {port} is already used by container {owner}; pick another DASHBOARD_PORT"
+    # Our own proxy device holds the host port while the container runs; not a conflict.
+    if port_owner(containers, port, "") is not None:
+        return None
+    if not port_free(port):
+        return f"Port {port} is already used on this host; pick another DASHBOARD_PORT"
+    return None
 
 
 def _http_json(url: str, api_key: str) -> dict:

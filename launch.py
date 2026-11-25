@@ -18,8 +18,7 @@ from helpers import (
     ensure_keypair,
     lxc_list,
     nesting_missing,
-    port_free,
-    port_owner,
+    port_conflict,
     proxy_device_commands,
     proxy_device_matches,
     read_pubkey,
@@ -42,15 +41,9 @@ state = container_state(containers, CONTAINER)
 LISTEN = f"tcp:127.0.0.1:{DASHBOARD_PORT}"
 CONNECT = f"tcp:127.0.0.1:{DASHBOARD_PORT}"
 if DASHBOARD_PORT is not None:
-    owner = port_owner(containers, DASHBOARD_PORT, CONTAINER)
-    if owner is not None:
-        raise RuntimeError(
-            f"Port {DASHBOARD_PORT} is already used by container {owner}; pick another DASHBOARD_PORT"
-        )
-    if not port_free(DASHBOARD_PORT):
-        raise RuntimeError(
-            f"Port {DASHBOARD_PORT} is already used on this host; pick another DASHBOARD_PORT"
-        )
+    conflict = port_conflict(containers, CONTAINER, DASHBOARD_PORT)
+    if conflict is not None:
+        raise RuntimeError(conflict)
 
 
 def forget_host_key() -> None:

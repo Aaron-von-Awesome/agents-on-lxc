@@ -22,7 +22,7 @@ from hermes.helpers import (  # noqa: E402
     key_env_for,
     merge_env_command,
 )
-from helpers import chat_test_wanted, preflight, wait_for_url  # noqa: E402
+from helpers import chat_test_wanted, enable_linger, preflight, wait_for_url  # noqa: E402
 from settings import (  # noqa: E402
     BASE_URL,
     CLAUDE_CODE,
@@ -116,12 +116,7 @@ unit = files.put(
 )
 
 # Linger starts the user manager at boot, so the dashboard runs without a login.
-if host.get_fact(File, path=f"/var/lib/systemd/linger/{SSH_USER}") is None:
-    server.shell(
-        name="Enable linger",
-        commands=[StringCommand("loginctl enable-linger", QuoteString(SSH_USER))],
-        _sudo=True,
-    )
+enable_linger(SSH_USER)
 
 # try-restart only acts on a running service, so a first install is unaffected.
 server.shell(
