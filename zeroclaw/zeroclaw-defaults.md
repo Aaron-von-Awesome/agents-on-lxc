@@ -103,33 +103,47 @@ How the defaults were read: the release binary, the minimal `config.toml` this d
 
 **Goal:** the agent can run tools, remember, and write or improve its own skills, and nothing else. The deploy already sets loopback-only gateway with pairing, a `main` risk profile at `supervised`, `allowed_commands = ["uname"]` and `web_search.enabled = false`. Those stay.
 
-Config paths come from `crates/zeroclaw-config/src/schema.rs` (`#[prefix]` attributes) and `builtin_tools.rs`. None are in `zeroclaw/defaults.py` yet; this is a proposal only.
+Config paths come from `crates/zeroclaw-config/src/schema.rs` (`#[prefix]` attributes) and `builtin_tools.rs`. All rows are in `zeroclaw/defaults.py`; see Implemented below.
 
 ## Settings
 
 | `defaults.py` name | Value | Config path | Effect |
 |---|---|---|---|
-| `TOOLS_OPTIONAL` | `[]` | `tools.optional` | Only the 11 core tools are offered. Drops `model_routing_config`, `proxy_config`, cron, browser, SaaS, delegation and the chat helpers. Also shrinks the prompt for the local model |
-| `ALLOWED_TOOLS` | `["shell", "file_read", "file_write", "file_edit", "glob_search", "content_search", "memory_recall", "memory_store", "memory_forget", "web_fetch"]` | `risk_profiles.main.allowed_tools` | Closed set for built-ins and MCP. Removes `git_operations` (network) from the core 11. Skill-defined tools stay available |
+| `TOOLS_OPTIONAL` | `["knowledge", "sop_list", "sop_execute", "sop_advance", "sop_approve", "sop_status", "sop_workshop"]` | `tools.optional` | The 11 core tools plus `knowledge` and the six SOP tools. Drops `model_routing_config`, `proxy_config`, cron, browser, SaaS, delegation and the chat helpers. Also shrinks the prompt for the local model |
+| `ALLOWED_TOOLS` | `["shell", "file_read", "file_write", "file_edit", "glob_search", "content_search", "memory_recall", "memory_store", "memory_forget", "web_fetch", "knowledge", "sop_list", "sop_execute", "sop_advance", "sop_approve", "sop_status", "sop_workshop"]` | `risk_profiles.main.allowed_tools` | Closed set for built-ins and MCP. Removes `git_operations` (network) from the core 11 and adds the `TOOLS_OPTIONAL` tools. Skill-defined tools stay available |
 | `AUTO_APPROVE` | `["shell", "file_read", "file_write", "file_edit", "glob_search", "content_search", "memory_recall", "memory_store"]` | `risk_profiles.main.auto_approve` | Reads, writes and memory writes run unattended. `memory_forget` and `web_fetch` still ask |
 | `ALLOWED_COMMANDS` | `["uname"]` (unchanged) | `risk_profiles.main.allowed_commands` | Never add `python`, `node`, `pip`, `npm`, `git` or `cargo`: each one runs any code |
 | `WORKSPACE_ONLY` | `True` | `risk_profiles.main.workspace_only` | Set it explicitly; the schema comment and the code disagree on the default |
 | `SKILL_CREATION` | `True` | `skills.skill_creation.enabled` | The agent writes a skill after a successful multi-step task. This is the "learn" switch |
-| `SKILL_IMPROVEMENT` | `True` | `skills.skill_improvement.enabled` | A post-turn background job patches skills. It builds its own toolset (`skills_list`, `skill_view`, `skill_manage`), so `tools.optional = []` does not block it |
+| `SKILL_IMPROVEMENT` | `True` | `skills.skill_improvement.enabled` | A post-turn background job patches skills. It builds its own toolset (`skills_list`, `skill_view`, `skill_manage`), so the narrowed `tools.optional` does not block it |
 | `WEB_FETCH_DOMAINS` | `[]` | `web_fetch.enabled` = `bool(list)`, `web_fetch.allowed_domains` = list | Off unless a variant names domains, for example `["docs.rs", "wiki.archlinux.org"]` |
 | `HTTP_REQUEST_ENABLED` | `False` | `http_request.enabled` | No arbitrary API calls or POSTs |
 | `BROWSER_ENABLED` | `False` | `browser.enabled` | Gates `browser_open`. Belt and braces: the tool is already outside the minimal set |
 | `MCP_ENABLED` | `False` | `mcp.enabled` | No servers are configured anyway |
 | `SCHEDULER_ENABLED` | `False` | `scheduler.enabled` | No cron jobs, no catch-up runs at startup. Skill improvement does not use it |
 | `CHECK_UPDATES` | `False` | `gateway.check_updates` | Stops the GitHub poll |
-| `SANDBOX_BACKEND` | `"firejail"` | `security.sandbox.enabled` = `true`, `security.sandbox.backend` | The release binary has only firejail and Docker. Needs `apt install firejail` in the deploy |
+| `SANDBOX_BACKEND` | `"docker"` | `risk_profiles.main.sandbox_enabled` = `backend != "none"`, `risk_profiles.main.sandbox_backend` | Explicit instead of `auto`. Each shell command runs in `docker run --rm --network none --memory 512m --cpus 1.0 alpine:latest`, with the workspace mounted read-only (`crates/zeroclaw-runtime/src/security/docker.rs`). `launch.py` installs the Docker snap, adds `SSH_USER` to the `docker` group and turns on LXD nesting. Set `"none"` to turn it off |
+| `MEMORY_BACKEND` | `"sqlite"` | `memory.backend` | `brain.db` in the workspace. Same as the default, set explicitly |
+| `MEMORY_AUTO_SAVE` | `True` | `memory.auto_save` | User messages are stored automatically. Learning needs it |
+| `MEMORY_HYGIENE` | `True` | `memory.hygiene_enabled` | Runs the archive and purge below |
+| `MEMORY_ARCHIVE_AFTER_DAYS` | `7` | `memory.archive_after_days` | Same as the default |
+| `MEMORY_PURGE_AFTER_DAYS` | `30` | `memory.purge_after_days` | Same as the default |
+| `MEMORY_SEARCH_MODE` | `"hybrid"` | `memory.search_mode` | Keyword-only while there is no embedder; picks up an embedder later without a second change |
+| `MEMORY_EMBEDDING_PROVIDER` | `"none"` | `memory.embedding_provider` | No embedding model, no extra network calls |
+| `MEMORY_SNAPSHOT` | `True` | `memory.snapshot_enabled` | **Turned on** (default off). Exports core memories to `MEMORY_SNAPSHOT.md` |
+| `MEMORY_SNAPSHOT_ON_HYGIENE` | `True` | `memory.snapshot_on_hygiene` | **Turned on** (default off). Exports core memories during each hygiene pass |
+| `MEMORY_EXTRACT_FACTS` | `True` | `memory.consolidation_extract_facts` | **Turned on** (default off). The model pulls facts out of conversations into core memories. Needs the sqlite backend |
+| `MEMORY_RESPONSE_CACHE` | `True` | `memory.response_cache_enabled` | **Turned on** (default off). Repeated prompts are answered from the cache, not the model |
+| `MEMORY_RECALL_LIMIT` | `5` | `runtime_profiles.main.memory_recall_limit` | Memories added to each turn. Same as the default; `agents.main.runtime_profile = "main"` links it |
+| `KNOWLEDGE_ENABLED` | `True` | `knowledge.enabled` | **Turned on** (default off). The knowledge graph behind the `knowledge` tool |
+| `SOP_PROCEDURAL_MEMORY` | `True` | `sop.procedural_memory_enabled` | **Turned on** (default off). The agent may propose and write back SOPs (step-by-step procedures). Marked experimental upstream |
+| `SOP_SOPS_DIR` | `"shared/sops"` | `sop.sops_dir` | **Turned on** (default unset). Setting it is what enables SOP loading. Relative paths resolve against the install root, so this is `<install>/shared/sops` |
 
 Left at the default, because the default is already the hardened value:
 - `skills.allow_scripts = false`, `skills.open_skills_enabled = false`
 - `plugins.enabled = false`
 - delegation policy `forbidden`
-- heartbeat and SOP off
-- sqlite memory with `auto_save` (learning needs it)
+- heartbeat off
 - `block_high_risk_commands` and `require_approval_for_medium_risk` on
 
 ## Mapping onto the deploy
@@ -149,29 +163,33 @@ New lines for `_settings(s)` in `zeroclaw/helpers.py`:
 ("mcp.enabled", s.MCP_ENABLED),
 ("scheduler.enabled", s.SCHEDULER_ENABLED),
 ("gateway.check_updates", s.CHECK_UPDATES),
-("security.sandbox.enabled", True),
-("security.sandbox.backend", s.SANDBOX_BACKEND),
+("risk_profiles.main.sandbox_enabled", s.SANDBOX_BACKEND != "none"),
+("risk_profiles.main.sandbox_backend", s.SANDBOX_BACKEND),
 ```
-
-`zeroclaw/deploy.py` also needs `apt.packages(packages=["firejail"])` before the service starts.
 
 ## Risks and unverified points
 
-- **Firejail in an unprivileged LXD container** may fail (it needs setuid and user namespaces). What ZeroClaw does when `enabled = true` and the backend fails was not checked. Test it on the live run. If it fails, set `SANDBOX_BACKEND = "none"` on purpose rather than leaving `auto`.
+- **Docker sandbox fails open.** If ZeroClaw cannot find or start `docker`, it logs a warning and runs shell commands unsandboxed (`crates/zeroclaw-runtime/src/security/detect.rs:455`). The deploy does not check for that warning.
+- **`docker` on the service PATH.** The ZeroClaw unit sets no `PATH`, so it relies on the user manager's PATH including `/snap/bin` (snapd adds it through a systemd user-environment generator). Not checked.
+- **Docker snap and hidden folders.** The snap reaches only files under `$HOME`, and the snap `home` interface does not cover hidden folders such as `~/.zeroclaw`. The deploy therefore sets `agents.main.workspace.path = /home/<SSH_USER>/zeroclaw-workspace` (`zeroclaw/helpers.py::workspace_path`, folder mode 700). `config.toml` and secrets stay in `~/.zeroclaw`, which the sandbox never mounts. `ZEROCLAW_CONFIG_DIR` / `ZEROCLAW_DATA_DIR` were not used: they are env-only, never saved to disk, and every `zeroclaw` call plus the systemd unit would need them (`docs/book/src/reference/env-vars.md`). The agent tool test (`uname -a`) fails if the mount is refused, and, when `SANDBOX_BACKEND` is not `none`, also fails if the reply shows the LXD container's hostname (the sandbox fell back to running unsandboxed). This checks the `zeroclaw agent` command, which runs the agent in its own process with the SSH login's groups, not the running service.
+- **Shell commands cannot write.** The workspace is mounted read-only inside the sandbox and the network is off. File tools (`file_write`, `file_edit`) are not sandboxed and still write.
+- **`docker` group.** `SSH_USER` is effectively root inside the LXD container. The LXD container is still the outer boundary.
+- Firejail is not installed. It may fail in an unprivileged LXD container (it needs setuid and user namespaces).
 - **Approvals with no human present** are refused. `file_write` and `file_edit` are in `AUTO_APPROVE`, so a headless deploy can write in its workspace without a human; `workspace_only` still applies. `memory_forget` and `web_fetch` still ask.
-- **Memory cleanup** (archive 7 days, purge 30) may run on the scheduler. Not checked.
+- **Memory cleanup** (archive 7 days, purge 30) does not need the scheduler. It runs when the memory store opens, at most every 12 hours (`zeroclaw-memory/src/hygiene.rs`), and the snapshot export runs with it. A daemon that runs for days without a restart may clean up less often; not checked.
 - **`config set` spelling** of each path is unverified until the live run, the same as the existing settings.
 - **Skill creation with a small local model** may write poor skills. `skills.skill_creation.max_skills` caps the count; the oldest is evicted first.
 
 # Implemented
 
-`zeroclaw/defaults.py` now sets every value above explicitly (41 `config set`
+`zeroclaw/defaults.py` now sets every value above explicitly (42 `config set`
 rows, `zeroclaw/helpers.py::_settings`). Deviations from this proposal:
 
-- Sandbox: `risk_profiles.main.sandbox_enabled = false`,
-  `risk_profiles.main.sandbox_backend = "none"`. There is no
-  `[security.sandbox]` table in the schema; the sandbox lives on the risk
-  profile. Firejail is not installed.
+- Sandbox: `risk_profiles.main.sandbox_enabled = true`,
+  `risk_profiles.main.sandbox_backend = "docker"`. `SandboxConfig`
+  (`security.sandbox`) exists in `schema.rs` but `Config` never references it;
+  the sandbox lives on the risk profile. Firejail is not installed. The
+  `zeroius-clawius` variant sets `SANDBOX_BACKEND = "none"` for now.
 - SOP scope A: `sop.sops_dir = "shared/sops"`,
   `sop.procedural_memory_enabled = true`, and `knowledge` plus the six `sop_*`
   tools are in both `tools.optional` and

@@ -117,4 +117,10 @@ def test_load_variant_ignores_broken_other(tmp_path):
 )
 def test_every_variant_loads(path):
     v = settings.load_variant(f"{path.parent.parent.name}/{path.stem}", settings.ROOT)
-    assert v["AGENT"] == path.parent.parent.name and v["CONTAINER"] and v["DASHBOARD_PORT"]
+    assert v["AGENT"] == path.parent.parent.name and v["CONTAINER"] and (v["AGENT"] == "pi" or v["DASHBOARD_PORT"])
+
+
+def test_variants_without_port_do_not_clash(tmp_path):
+    write(tmp_path, "pi/a", 'CONTAINER = "a"\n')
+    write(tmp_path, "pi/b", 'CONTAINER = "b"\n')
+    assert settings.load_variant("pi/a", tmp_path) == {"CONTAINER": "a", "AGENT": "pi"}

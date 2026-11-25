@@ -1,6 +1,6 @@
 # Agents on LXC
 
-Deploy Hermes Agent or ZeroClaw in an LXD container with pyinfra, using the Ubuntu LXD snap. Run on the LXD host, from this folder.
+Deploy Hermes Agent, ZeroClaw or Pi in an LXD container with pyinfra, using the Ubuntu LXD snap. Run on the LXD host, from this folder.
 
 ```bash
 uv sync
@@ -9,12 +9,15 @@ AGENT_VARIANT=hermes/hermius-maximus uv run pyinfra inventory.py hermes/deploy.p
 
 AGENT_VARIANT=zeroclaw/zeroius-clawius uv run pyinfra @local launch.py
 AGENT_VARIANT=zeroclaw/zeroius-clawius uv run pyinfra inventory.py zeroclaw/deploy.py
+
+AGENT_VARIANT=pi/pious-agenticus uv run pyinfra @local launch.py
+AGENT_VARIANT=pi/pious-agenticus uv run pyinfra inventory.py pi/deploy.py
 ```
 
-- `AGENT_VARIANT` is `<agent>/<name>`, a file in `<agent>/variants/` (without `.py`). For a new variant, copy a file and change `CONTAINER` and `DASHBOARD_PORT` (both must be unique across variants).
-- Stage 1 (`launch.py`) creates/starts the container and opens SSH + dashboard access, and installs the Helix editor (classic snap). Stage 2 (`<agent>/deploy.py`) installs and configures the agent over SSH.
-- Both deploys ask for the llama.cpp API key, or read it from `LLAMA_API_KEY`.
-- Add `--dry` to preview the changes. Never add `--diff`: either deploy aborts rather than print the API-key file. Add `--data chat_test=true` to force the chat test.
+- `AGENT_VARIANT` is `<agent>/<name>`, a file in `<agent>/variants/` (without `.py`). For a new variant, copy a file and change `CONTAINER` and `DASHBOARD_PORT` (both must be unique across variants). `DASHBOARD_PORT` is needed only for agents with a dashboard (not Pi).
+- Stage 1 (`launch.py`) creates/starts the container and opens SSH + dashboard access, turns on LXD nesting (for Docker), and installs the Helix editor (classic snap) and the Docker snap, with `SSH_USER` in the `docker` group. Stage 2 (`<agent>/deploy.py`) installs and configures the agent over SSH.
+- Every deploy asks for the llama.cpp API key, or reads it from `LLAMA_API_KEY`.
+- Add `--dry` to preview the changes. Never add `--diff`: any deploy aborts rather than print the API-key file. Add `--data chat_test=true` to force the chat test.
 - Tests: `uv run pytest` (no LXD needed).
 - If stage 2 stops with an SSH host-key mismatch, clear the stale entry for the container IP: `ssh-keygen -R <container-ip>`.
 

@@ -22,7 +22,10 @@ BROWSER_ENABLED = False
 MCP_ENABLED = False
 SCHEDULER_ENABLED = False
 CHECK_UPDATES = False
-SANDBOX_BACKEND = "none"
+# "docker" runs each shell command in a throwaway alpine container (launch.py installs the Docker snap
+# and enables nesting). "none" turns the OS sandbox off. If Docker is missing, ZeroClaw logs a warning
+# and runs unsandboxed.
+SANDBOX_BACKEND = "docker"
 
 # Memory and learning, all explicit
 MEMORY_BACKEND = "sqlite"

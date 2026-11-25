@@ -16,6 +16,7 @@ def ns(**overrides):
         MODEL="ornith15",
         CONTEXT_LENGTH=262144,
         DASHBOARD_PORT=42617,
+        SSH_USER="ubuntu",
     )
     return SimpleNamespace(**(v | overrides))
 
@@ -41,6 +42,7 @@ def test_config_toml_round_trips():
         "model_provider": "llamacpp.local",
         "risk_profile": "main",
         "runtime_profile": "main",
+        "workspace": {"path": "/home/ubuntu/zeroclaw-workspace"},
     }
     assert c["risk_profiles"]["main"] == {
         "level": "supervised",
@@ -52,8 +54,8 @@ def test_config_toml_round_trips():
             "knowledge", "sop_list", "sop_execute", "sop_advance", "sop_approve", "sop_status", "sop_workshop",
         ],
         "workspace_only": True,
-        "sandbox_enabled": False,
-        "sandbox_backend": "none",
+        "sandbox_enabled": True,
+        "sandbox_backend": "docker",
     }
     assert c["runtime_profiles"]["main"] == {"memory_recall_limit": 5}
     assert c["web_search"] == {"enabled": False}
@@ -90,8 +92,10 @@ def test_config_set_settings_has_no_key_and_binds_loopback():
     d = dict(pairs)
     assert d["gateway.host"] == "127.0.0.1" and d["gateway.port"] == "42617"
     assert d["risk_profiles.main.allowed_commands"] == '["uname"]'
-    assert d["risk_profiles.main.sandbox_enabled"] == "false"
-    assert d["risk_profiles.main.sandbox_backend"] == "none"
+    assert d["risk_profiles.main.sandbox_enabled"] == "true"
+    assert d["risk_profiles.main.sandbox_backend"] == "docker"
+    off = dict(zc.config_set_settings(ns(SANDBOX_BACKEND="none")))
+    assert off["risk_profiles.main.sandbox_enabled"] == "false"
     assert all("api_key" not in p for p, _ in pairs)
 
 
@@ -99,7 +103,7 @@ def test_config_toml_matches_config_set_settings():  # one source of truth
     s = ns()
     c = tomllib.loads(zc.config_toml(s, "k"))
     pairs = zc.config_set_settings(s)
-    assert len(pairs) == 41
+    assert len(pairs) == 42
     for path, value in pairs:
         node = c
         for part in path.split("."):  # the alias llamacpp.local is two table levels
@@ -110,7 +114,7 @@ def test_config_toml_matches_config_set_settings():  # one source of truth
 def test_sandbox_uses_risk_profile_not_security_section():
     c = tomllib.loads(zc.config_toml(ns(), "k"))
     assert "sandbox" not in c.get("security", {})
-    assert c["risk_profiles"]["main"]["sandbox_backend"] == "none"
+    assert c["risk_profiles"]["main"]["sandbox_backend"] == "docker"
 
 
 def test_feature_tools_are_optional_and_allowed():

@@ -6,6 +6,11 @@ PROVIDER = "llamacpp.local"
 _PROVIDER_TABLE = f"providers.models.{PROVIDER}"
 
 
+# Outside hidden ~/.zeroclaw: the Docker snap cannot mount hidden folders in $HOME for the sandbox.
+def workspace_path(s) -> str:
+    return f"/home/{s.SSH_USER}/zeroclaw-workspace"
+
+
 def _settings(s) -> list[tuple[str, object]]:
     return [
         (f"{_PROVIDER_TABLE}.uri", s.BASE_URL),
@@ -14,6 +19,7 @@ def _settings(s) -> list[tuple[str, object]]:
         ("agents.main.model_provider", PROVIDER),
         ("agents.main.risk_profile", "main"),
         ("agents.main.runtime_profile", "main"),
+        ("agents.main.workspace.path", workspace_path(s)),
         ("risk_profiles.main.level", s.RISK_LEVEL),
         ("risk_profiles.main.auto_approve", s.AUTO_APPROVE),
         ("risk_profiles.main.allowed_commands", s.ALLOWED_COMMANDS),

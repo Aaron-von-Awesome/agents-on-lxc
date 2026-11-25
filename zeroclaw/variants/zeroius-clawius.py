@@ -1,5 +1,6 @@
-from zeroclaw.defaults import *  # noqa: F403  shared settings
 from pathlib import Path
+
+from zeroclaw.defaults import *  # noqa: F403  shared settings
 
 CONTAINER = "zeroius-clawius"
 IMAGE = "ubuntu:26.04"
@@ -14,11 +15,11 @@ MODEL = "ornith15"
 CONTEXT_LENGTH = 262144
 DASHBOARD_PORT = 42617
 PROXY_DEVICE = "dashboard"
+SANDBOX_BACKEND = "none"  # off while testing ZeroClaw; defaults.py uses docker
 
 # #################################################################################################
 # Shared settings come from zeroclaw/defaults.py. To change one for this variant only, uncomment and edit:
 # #################################################################################################
 #
 # ALLOWED_COMMANDS = [*ALLOWED_COMMANDS, "git"]
-# AUTO_APPROVE = [*AUTO_APPROVE, "file_write"]  # write files in its workspace without asking
 # WEB_SEARCH_ENABLED = True

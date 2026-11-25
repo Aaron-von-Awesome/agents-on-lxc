@@ -112,6 +112,20 @@ def has_device(containers: list[dict], name: str, device: str) -> bool:
     return device in ((_find(containers, name) or {}).get("devices") or {})
 
 
+# Docker inside an unprivileged container needs nesting plus these two syscall intercepts.
+NESTING_CONFIG = {
+    "security.nesting": "true",
+    "security.syscalls.intercept.mknod": "true",
+    "security.syscalls.intercept.setxattr": "true",
+}
+
+
+def nesting_missing(containers: list[dict], name: str) -> bool:
+    # expanded_config includes values set through profiles.
+    config = (_find(containers, name) or {}).get("expanded_config") or {}
+    return any(config.get(k) != v for k, v in NESTING_CONFIG.items())
+
+
 def proxy_device_matches(
     containers: list[dict], name: str, device: str, listen: str, connect: str
 ) -> bool:

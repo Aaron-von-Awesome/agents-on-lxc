@@ -86,6 +86,15 @@ def test_has_device():
     assert not helpers.has_device([], "c", "dashboard")
 
 
+def test_nesting_missing():
+    full = dict(helpers.NESTING_CONFIG)
+    assert not helpers.nesting_missing([{"name": "c", "expanded_config": full}], "c")
+    partial = {**full, "security.syscalls.intercept.mknod": "false"}
+    assert helpers.nesting_missing([{"name": "c", "expanded_config": partial}], "c")
+    assert helpers.nesting_missing([{"name": "c"}], "c")
+    assert helpers.nesting_missing([], "c")  # not launched yet
+
+
 def test_proxy_device_commands_are_whole_commands():
     listen = connect = "tcp:127.0.0.1:9119"
     stale = [

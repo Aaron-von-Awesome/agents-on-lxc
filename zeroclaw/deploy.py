@@ -1,14 +1,32 @@
 """Stage 2: install and configure ZeroClaw in the container. Run on the LXD host."""
 
+from getpass import getpass
 import io
 import os
-from getpass import getpass
 
-import settings
 from pyinfra import host
 from pyinfra.api import QuoteString, StringCommand
 from pyinfra.facts.files import File
 from pyinfra.operations import files, server, systemd
+
+from helpers import chat_test_wanted, check_api_key, preflight, wait_for_url
+import settings
+from settings import (
+    BASE_URL,
+    CONTEXT_LENGTH,
+    DASHBOARD_PORT,
+    MODEL,
+    SANDBOX_BACKEND,
+    SSH_USER,
+    ZEROCLAW_INSTALL_URL,
+)
+from zeroclaw.helpers import (
+    apply_settings_commands,
+    config_set_settings,
+    config_toml,
+    restart_commands,
+    workspace_path,
+)
 
 # Checked before the settings imports below: a hermes variant has no ZEROCLAW_INSTALL_URL.
 if settings.AGENT != "zeroclaw":
@@ -18,21 +36,6 @@ if host.state.config.DIFF:
         "--diff would print the API key file contents; re-run without --diff"
     )
 
-from helpers import check_api_key, chat_test_wanted, preflight, wait_for_url  # noqa: E402
-from settings import (  # noqa: E402
-    BASE_URL,
-    CONTEXT_LENGTH,
-    DASHBOARD_PORT,
-    MODEL,
-    SSH_USER,
-    ZEROCLAW_INSTALL_URL,
-)
-from zeroclaw.helpers import (  # noqa: E402
-    apply_settings_commands,
-    config_set_settings,
-    config_toml,
-    restart_commands,
-)
 
 HOME = f"/home/{SSH_USER}"
 ZC = f"{HOME}/.cargo/bin/zeroclaw"
@@ -59,6 +62,9 @@ if host.get_fact(File, path=ZC) is None:
     )
 
 files.directory(name="Create ~/.zeroclaw", path=ZC_DIR, mode="700")
+files.directory(
+    name="Create agent workspace", path=workspace_path(settings), mode="700"
+)
 
 cfg = None
 if host.get_fact(File, path=f"{ZC_DIR}/config.toml") is None:
@@ -125,14 +131,23 @@ server.shell(
 )
 
 
+# In the Docker sandbox, uname -a shows a random container ID, not this hostname.
+# The sandbox fails open, so a reply with this hostname means it did not engage.
+sandbox_check = (
+    ""
+    if SANDBOX_BACKEND == "none"
+    else ' && ! printf %s "$out" | grep -qF "$(hostname)"'
+)
 server.shell(
     name="Agent tool-call test",
     commands=[
         StringCommand(
+            "out=$(",
             ZC,
             "agent -a main -m",
             QuoteString("Run uname -a in the shell and reply with its exact output."),
-            '< /dev/null | tee /dev/stderr | grep -qF "$(uname -r)"',
+            "< /dev/null) && printf '%s\\n' \"$out\" >&2",
+            '&& printf %s "$out" | grep -qF "$(uname -r)"' + sandbox_check,
         )
     ],
     _if=lambda: chat_test_wanted(install, host.data),

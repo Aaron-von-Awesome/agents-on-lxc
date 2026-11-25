@@ -1,6 +1,7 @@
-"""Stage 1: create/start the LXD container and open SSH + dashboard access. Run on the LXD host."""
+"""Stage 1: create/start the LXD container and open SSH (+ dashboard, when the variant has one) access. Run on the LXD host."""
 
 import os
+import shlex
 import subprocess
 
 from pyinfra import host
@@ -8,12 +9,15 @@ from pyinfra.api import QuoteString, StringCommand
 from pyinfra.facts.lxd import LxdContainers
 from pyinfra.operations import python, server
 
+import settings
 from helpers import (
+    NESTING_CONFIG,
     authorize_key_script,
     container_ipv4,
     container_state,
     ensure_keypair,
     lxc_list,
+    nesting_missing,
     port_free,
     port_owner,
     proxy_device_commands,
@@ -22,14 +26,14 @@ from helpers import (
 )
 from settings import (
     CONTAINER,
-    DASHBOARD_PORT,
     IMAGE,
-    PROXY_DEVICE,
     PUBKEY_PATH,
     SSH_KEY_PATH,
     SSH_USER,
 )
 
+DASHBOARD_PORT = getattr(settings, "DASHBOARD_PORT", None)
+PROXY_DEVICE = getattr(settings, "PROXY_DEVICE", None)
 KNOWN_HOSTS = os.path.expanduser("~/.ssh/known_hosts")
 ensure_keypair(SSH_KEY_PATH)
 pubkey = read_pubkey(PUBKEY_PATH)
@@ -37,15 +41,16 @@ containers = host.get_fact(LxdContainers)
 state = container_state(containers, CONTAINER)
 LISTEN = f"tcp:127.0.0.1:{DASHBOARD_PORT}"
 CONNECT = f"tcp:127.0.0.1:{DASHBOARD_PORT}"
-owner = port_owner(containers, DASHBOARD_PORT, CONTAINER)
-if owner is not None:
-    raise RuntimeError(
-        f"Port {DASHBOARD_PORT} is already used by container {owner}; pick another DASHBOARD_PORT"
-    )
-if not port_free(DASHBOARD_PORT):
-    raise RuntimeError(
-        f"Port {DASHBOARD_PORT} is already used on this host; pick another DASHBOARD_PORT"
-    )
+if DASHBOARD_PORT is not None:
+    owner = port_owner(containers, DASHBOARD_PORT, CONTAINER)
+    if owner is not None:
+        raise RuntimeError(
+            f"Port {DASHBOARD_PORT} is already used by container {owner}; pick another DASHBOARD_PORT"
+        )
+    if not port_free(DASHBOARD_PORT):
+        raise RuntimeError(
+            f"Port {DASHBOARD_PORT} is already used on this host; pick another DASHBOARD_PORT"
+        )
 
 
 def forget_host_key() -> None:
@@ -120,23 +125,63 @@ server.shell(
     _timeout=1800,
 )
 
+# Group first, so the Docker snap picks it up on its first start (canonical/docker-snap README),
+# and before the nesting restart, so the user's services start with the group.
+# Members of the docker group are effectively root in the container.
+user = shlex.quote(SSH_USER)
+server.shell(
+    name="Add SSH user to docker group",
+    commands=[
+        StringCommand(
+            in_container(
+                "{ getent group docker >/dev/null || addgroup --system docker; }"
+                f" && {{ id -nG {user} | tr ' ' '\\n' | grep -qx docker || adduser {user} docker; }}"
+            )
+        )
+    ],
+)
+
+# Docker runs inside the container, which needs nesting. Restarts only when a key is missing.
+if nesting_missing(containers, CONTAINER):
+    server.shell(
+        name="Enable nesting, restart",
+        commands=[
+            StringCommand(
+                "lxc config set",
+                QuoteString(CONTAINER),
+                *[QuoteString(f"{k}={v}") for k, v in NESTING_CONFIG.items()],
+            ),
+            StringCommand("lxc restart", QuoteString(CONTAINER)),
+        ],
+    )
+
 wait_for_cloud_init("Wait for boot after restart")
 
-def helix_missing() -> bool:
-    return (
-        subprocess.run(
-            ["lxc", "exec", CONTAINER, "--", "snap", "list", "helix"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        ).returncode
-        != 0
-    )
+
+def snap_missing(name: str):
+    def check() -> bool:
+        return (
+            subprocess.run(
+                ["lxc", "exec", CONTAINER, "--", "snap", "list", name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            != 0
+        )
+
+    return check
 
 
 server.shell(
     name="Install Helix snap",
     commands=[StringCommand(in_container("snap install helix --classic"))],
-    _if=helix_missing,
+    _if=snap_missing("helix"),
+)
+
+server.shell(
+    name="Install Docker snap",
+    commands=[StringCommand(in_container("snap install docker"))],
+    _if=snap_missing("docker"),
 )
 
 if launch is not None:
@@ -160,7 +205,9 @@ server.shell(
     ],
 )
 
-if not proxy_device_matches(containers, CONTAINER, PROXY_DEVICE, LISTEN, CONNECT):
+if DASHBOARD_PORT is not None and not proxy_device_matches(
+    containers, CONTAINER, PROXY_DEVICE, LISTEN, CONNECT
+):
     server.shell(
         name="Set dashboard proxy device",
         commands=proxy_device_commands(

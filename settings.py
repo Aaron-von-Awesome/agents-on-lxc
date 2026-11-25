@@ -6,7 +6,7 @@ import runpy
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-AGENTS = ("hermes", "zeroclaw")
+AGENTS = ("hermes", "zeroclaw", "pi")
 
 
 def _variant_literals(path: Path) -> dict[str, object]:
