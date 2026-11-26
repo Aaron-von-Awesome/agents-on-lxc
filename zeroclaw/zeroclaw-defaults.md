@@ -38,7 +38,7 @@ How the defaults were read: the release binary, the minimal `config.toml` this d
 | `skill_improvement` (a background job patches existing skills) | **off** |
 | `open_skills` (clones community skills from git), `allow_scripts` | off |
 | Skill registry install | operator command (`zeroclaw skills install`), not the agent |
-| WASM plugins | host built in, but `plugins.enabled = false`, `auto_discover = false`, signature checks `disabled`. None bundled |
+| WASM plugins | host built in: the prebuilt release includes `plugins-wasm-cranelift` (`Cargo.toml` `dist_extra_features`; only Android and 32-bit ARM archives drop it). But `plugins.enabled = false`, `auto_discover = false`, signature checks `disabled`. None bundled |
 | MCP | `mcp.enabled = true`, but **no servers**. An agent connects only to the servers in its own `mcp_bundles` |
 
 ## Memory and learning
@@ -93,6 +93,7 @@ How the defaults were read: the release binary, the minimal `config.toml` this d
 
 - `security/autonomy.md` uses old tool names (`file_list`, `memory_search`, `http`, `time`).
 - The comment on `workspace_only` says it defaults to off; the code makes it on.
+- `getting-started/quickstart.md` (Plugins) says release archives are built without `plugins-wasm`, so Quickstart has no Plugins row. Stale: `Cargo.toml` `dist_extra_features` adds `plugins-wasm-cranelift` to the standard release (`xtask/src/generate/spec.rs::dist_extra_features` reads it).
 
 ## Not checked
 
@@ -110,13 +111,13 @@ Config paths come from `crates/zeroclaw-config/src/schema.rs` (`#[prefix]` attri
 | `defaults.py` name | Value | Config path | Effect |
 |---|---|---|---|
 | `TOOLS_OPTIONAL` | `["knowledge", "sop_list", "sop_execute", "sop_advance", "sop_approve", "sop_status", "sop_workshop"]` | `tools.optional` | The 11 core tools plus `knowledge` and the six SOP tools. Drops `model_routing_config`, `proxy_config`, cron, browser, SaaS, delegation and the chat helpers. Also shrinks the prompt for the local model |
-| `ALLOWED_TOOLS` | `["shell", "file_read", "file_write", "file_edit", "glob_search", "content_search", "memory_recall", "memory_store", "memory_forget", "web_fetch", "knowledge", "sop_list", "sop_execute", "sop_advance", "sop_approve", "sop_status", "sop_workshop"]` | `risk_profiles.main.allowed_tools` | Closed set for built-ins and MCP. Removes `git_operations` (network) from the core 11 and adds the `TOOLS_OPTIONAL` tools. Skill-defined tools stay available |
+| `ALLOWED_TOOLS` | `["content_search", "file_edit", "file_read", "file_write", "git_operations", "glob_search", "knowledge", "memory_forget", "memory_recall", "memory_store", "shell", "sop_advance", "sop_approve", "sop_execute", "sop_list", "sop_status", "sop_workshop", "web_fetch"]` (sorted) | `risk_profiles.main.allowed_tools` | Closed set for built-ins and MCP. All of the core 11, including `git_operations`, plus the `TOOLS_OPTIONAL` tools. Skill-defined tools stay available |
 | `AUTO_APPROVE` | `["shell", "file_read", "file_write", "file_edit", "glob_search", "content_search", "memory_recall", "memory_store"]` | `risk_profiles.main.auto_approve` | Reads, writes and memory writes run unattended. `memory_forget` and `web_fetch` still ask |
 | `ALLOWED_COMMANDS` | `["uname"]` (unchanged) | `risk_profiles.main.allowed_commands` | Never add `python`, `node`, `pip`, `npm`, `git` or `cargo`: each one runs any code |
 | `WORKSPACE_ONLY` | `True` | `risk_profiles.main.workspace_only` | Set it explicitly; the schema comment and the code disagree on the default |
 | `SKILL_CREATION` | `True` | `skills.skill_creation.enabled` | The agent writes a skill after a successful multi-step task. This is the "learn" switch |
 | `SKILL_IMPROVEMENT` | `True` | `skills.skill_improvement.enabled` | A post-turn background job patches skills. It builds its own toolset (`skills_list`, `skill_view`, `skill_manage`), so the narrowed `tools.optional` does not block it |
-| `WEB_FETCH_DOMAINS` | `[]` | `web_fetch.enabled` = `bool(list)`, `web_fetch.allowed_domains` = list | Off unless a variant names domains, for example `["docs.rs", "wiki.archlinux.org"]` |
+| `WEB_FETCH_DOMAINS` | `[]` | `web_fetch.enabled` = `bool(list)`, `web_fetch.allowed_domains` = list | Off unless a variant names domains; `zeroius-clawius` does (see Implemented) |
 | `HTTP_REQUEST_ENABLED` | `False` | `http_request.enabled` | No arbitrary API calls or POSTs |
 | `BROWSER_ENABLED` | `False` | `browser.enabled` | Gates `browser_open`. Belt and braces: the tool is already outside the minimal set |
 | `MCP_ENABLED` | `False` | `mcp.enabled` | No servers are configured anyway |
@@ -176,7 +177,7 @@ New lines for `_settings(s)` in `zeroclaw/helpers.py`:
 - **`docker` group.** `SSH_USER` is effectively root inside the LXD container. The LXD container is still the outer boundary.
 - Firejail is not installed. It may fail in an unprivileged LXD container (it needs setuid and user namespaces).
 - **Approvals with no human present** are refused. `file_write` and `file_edit` are in `AUTO_APPROVE`, so a headless deploy can write in its workspace without a human; `workspace_only` still applies. `memory_forget` and `web_fetch` still ask.
-- **Memory cleanup** (archive 7 days, purge 30) does not need the scheduler. It runs when the memory store opens, at most every 12 hours (`zeroclaw-memory/src/hygiene.rs`), and the snapshot export runs with it. A daemon that runs for days without a restart may clean up less often; not checked.
+- **Memory cleanup** (archive 7 days, purge 30) does not need the scheduler. It runs when the memory store opens, at most every 12 hours (`crates/zeroclaw-memory/src/hygiene.rs`), and the snapshot export runs with it. A daemon that runs for days without a restart may clean up less often; not checked.
 - **`config set` spelling** of each path is unverified until the live run, the same as the existing settings.
 - **Skill creation with a small local model** may write poor skills. `skills.skill_creation.max_skills` caps the count; the oldest is evicted first.
 
@@ -199,5 +200,25 @@ rows, `zeroclaw/helpers.py::_settings`). Deviations from this proposal:
   keyword-only; `hybrid` is kept so a later embedding provider is picked up
   without a second change.
 - `memory_export` / `memory_purge` stay off.
+- `git_operations` is in `ALLOWED_TOOLS` (the proposal left it out for its
+  network access). Git commands that write follow the per-agent sandbox, so
+  with `SANDBOX_BACKEND = "none"` only `workspace_only` confines them; push
+  and pull reach whatever remotes git is configured for.
+- `zeroius-clawius` sets `WEB_FETCH_DOMAINS = ["docs.rs", "wiki.archlinux.org",
+  "docs.python.org", "github.com"]`, so `web_fetch` is on for those hosts only.
+  It is not in `AUTO_APPROVE`, so each fetch asks; with nobody at the
+  dashboard it is refused.
 - `AUTO_APPROVE` adds `file_write` and `file_edit`, so the agent can write in its
   workspace with nobody at the dashboard (`workspace_only` still applies).
+- PATH: the installer runs with `--no-modify-path`, so the deploy adds
+  `export PATH="$HOME/.cargo/bin:$PATH"` to `~/.profile` (`files.line`, added
+  once). `zeroclaw` then works in an SSH login; the service and the deploy call
+  it by its full path.
+- API key rotation: the key's sha256 is part of the `.deploy-settings` stamp,
+  so a new `LLAMA_API_KEY` re-runs the apply step. The deploy stages the key
+  in `~/.zeroclaw/.api-key` (mode 600), and `set_api_key_command` copies it
+  into the `api_key` line of `[providers.models.llamacpp.local]` with a short
+  `python3` script, then deletes the file. `zeroclaw config set` can't be used:
+  it reads secrets only from a terminal (`src/main.rs:230`). ZeroClaw accepts
+  a plaintext `api_key` (`crates/zeroclaw-config/src/secrets.rs:289`). If the header
+  is missing, the step fails and the next run retries.

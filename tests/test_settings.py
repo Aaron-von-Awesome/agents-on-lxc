@@ -46,7 +46,17 @@ def test_load_variant_zeroclaw_sets_agent(tmp_path):
 
 @pytest.mark.parametrize(
     "spec",
-    [None, "", "lab", "/lab", "hermes/", "hermes/a/b", "nope/lab", "hermes/../settings", "hermes/missing"],
+    [
+        None,
+        "",
+        "lab",
+        "/lab",
+        "hermes/",
+        "hermes/a/b",
+        "nope/lab",
+        "hermes/../settings",
+        "hermes/missing",
+    ],
 )
 def test_load_variant_refuses(tmp_path, spec):
     write(tmp_path, "hermes/lab", "")
@@ -82,15 +92,27 @@ def test_hermius_maximus_values():
     ],
 )
 def test_load_variant_rejects_duplicate(tmp_path, other):
-    write(tmp_path, "hermes/lab", 'CONTAINER = "lab"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n')
+    write(
+        tmp_path,
+        "hermes/lab",
+        'CONTAINER = "lab"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n',
+    )
     write(tmp_path, "hermes/old", other)
     with pytest.raises(RuntimeError, match="hermes/old.py"):
         settings.load_variant("hermes/lab", tmp_path)
 
 
 def test_load_variant_rejects_duplicate_across_agents(tmp_path):
-    write(tmp_path, "hermes/h", 'CONTAINER = "h"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n')
-    write(tmp_path, "zeroclaw/z", 'CONTAINER = "z"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n')
+    write(
+        tmp_path,
+        "hermes/h",
+        'CONTAINER = "h"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n',
+    )
+    write(
+        tmp_path,
+        "zeroclaw/z",
+        'CONTAINER = "z"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n',
+    )
     with pytest.raises(
         RuntimeError, match="DASHBOARD_PORT 9119 is also set in hermes/h.py"
     ):
@@ -98,13 +120,25 @@ def test_load_variant_rejects_duplicate_across_agents(tmp_path):
 
 
 def test_load_variant_allows_distinct(tmp_path):
-    write(tmp_path, "hermes/lab", 'CONTAINER = "lab"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n')
-    write(tmp_path, "zeroclaw/old", 'CONTAINER = "old"\nDASHBOARD_PORT = 9120\nPROXY_DEVICE = "dashboard"\n')
+    write(
+        tmp_path,
+        "hermes/lab",
+        'CONTAINER = "lab"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n',
+    )
+    write(
+        tmp_path,
+        "zeroclaw/old",
+        'CONTAINER = "old"\nDASHBOARD_PORT = 9120\nPROXY_DEVICE = "dashboard"\n',
+    )
     assert settings.load_variant("hermes/lab", tmp_path)["CONTAINER"] == "lab"
 
 
 def test_load_variant_ignores_broken_other(tmp_path):
-    write(tmp_path, "hermes/lab", 'CONTAINER = "lab"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n')
+    write(
+        tmp_path,
+        "hermes/lab",
+        'CONTAINER = "lab"\nDASHBOARD_PORT = 9119\nPROXY_DEVICE = "dashboard"\n',
+    )
     write(tmp_path, "hermes/bad_import", "import does_not_exist\n")
     write(tmp_path, "zeroclaw/bad_syntax", "CONTAINER = ")
     assert settings.load_variant("hermes/lab", tmp_path)["CONTAINER"] == "lab"
@@ -117,7 +151,11 @@ def test_load_variant_ignores_broken_other(tmp_path):
 )
 def test_every_variant_loads(path):
     v = settings.load_variant(f"{path.parent.parent.name}/{path.stem}", settings.ROOT)
-    assert v["AGENT"] == path.parent.parent.name and v["CONTAINER"] and (v["AGENT"] == "pi" or v["DASHBOARD_PORT"])
+    assert (
+        v["AGENT"] == path.parent.parent.name
+        and v["CONTAINER"]
+        and (v["AGENT"] == "pi" or v["DASHBOARD_PORT"])
+    )
 
 
 def test_load_variant_requires_proxy_device_with_port(tmp_path):

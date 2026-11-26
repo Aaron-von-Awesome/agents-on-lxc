@@ -1,8 +1,10 @@
 import json
+import os
 import shlex
 import socket
 import subprocess
 import urllib.request
+from getpass import getpass
 from pathlib import Path
 from typing import Literal
 
@@ -230,7 +232,7 @@ def preflight(base_url: str, model: str, context_length: int, api_key: str) -> N
             m.get("id")
             for m in _http_json(f"{base_url}/models", api_key).get("data", [])
         ]
-    except Exception as e:  # noqa: BLE001 - any failure means "server not usable"
+    except Exception as e:
         raise RuntimeError(f"GET /models failed: {e}") from e
     if model not in models:
         raise RuntimeError(f"model {model!r} not served; server lists {models}")
@@ -241,9 +243,18 @@ def preflight(base_url: str, model: str, context_length: int, api_key: str) -> N
             .get("default_generation_settings", {})
             .get("n_ctx")
         )
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise RuntimeError(f"GET /props failed: {e}") from e
     if n_ctx != context_length:
         raise RuntimeError(
             f"per-slot context is {n_ctx}, expected {context_length} (check llama-server -c / -np)"
         )
+
+
+def read_api_key(base_url: str, model: str, context_length: int) -> str:
+    # LLAMA_API_KEY or a prompt; checked, then tried against the server before any write.
+    api_key = check_api_key(
+        (os.environ.get("LLAMA_API_KEY") or getpass("llama.cpp API key: ")).strip()
+    )
+    preflight(base_url, model, context_length, api_key)
+    return api_key

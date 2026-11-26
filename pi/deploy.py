@@ -1,8 +1,6 @@
 """Stage 2: install and configure Pi in the container. Run on the LXD host."""
 
-from getpass import getpass
 import io
-import os
 
 from pyinfra import host
 from pyinfra.api import QuoteString, StringCommand
@@ -10,8 +8,8 @@ from pyinfra.facts.files import File
 from pyinfra.facts.server import Command
 from pyinfra.operations import files, server
 
-from helpers import chat_test_wanted, check_api_key, preflight
 import settings
+from helpers import chat_test_wanted, read_api_key
 
 # Checked before the settings imports below: other variants have no PI_INSTALL_URL.
 if settings.AGENT != "pi":
@@ -21,8 +19,8 @@ if host.state.config.DIFF:
         "--diff would print the API key file contents; re-run without --diff"
     )
 
-from pi.helpers import models_json, settings_json  # noqa: E402
-from settings import (  # noqa: E402
+from pi.helpers import models_json, settings_json
+from settings import (
     BASE_URL,
     CONTEXT_LENGTH,
     MODEL,
@@ -36,24 +34,23 @@ PI_DIR = f"{HOME}/.pi/agent"
 # The non-login SSH shell has neither directory on PATH.
 PATH_PREFIX = f"PATH={HOME}/.local/bin:/snap/bin:$PATH"
 
-api_key = check_api_key(
-    (os.environ.get("LLAMA_API_KEY") or getpass("llama.cpp API key: ")).strip()
-)
-preflight(BASE_URL, MODEL, CONTEXT_LENGTH, api_key)
+api_key = read_api_key(BASE_URL, MODEL, CONTEXT_LENGTH)
 
 # Runs when Node is missing or tracks another channel (column 4 of `snap list`).
 server.shell(
     name="Install Node snap, or move it to NODE_SNAP_CHANNEL",
     commands=[
-        "if snap list node >/dev/null 2>&1;"
-        f" then snap refresh node --channel={NODE_SNAP_CHANNEL};"
-        f" else snap install node --channel={NODE_SNAP_CHANNEL} --classic; fi"
+        (
+            "if snap list node >/dev/null 2>&1;"
+            f" then snap refresh node --channel={NODE_SNAP_CHANNEL};"
+            f" else snap install node --channel={NODE_SNAP_CHANNEL} --classic; fi"
+        )
     ],
     _sudo=True,
-    _if=lambda: host.get_fact(
-        Command, "snap list node 2>/dev/null | awk 'NR==2 {print $4}'"
-    )
-    != NODE_SNAP_CHANNEL,
+    _if=lambda: (
+        host.get_fact(Command, "snap list node 2>/dev/null | awk 'NR==2 {print $4}'")
+        != NODE_SNAP_CHANNEL
+    ),
 )
 
 install = server.shell(
@@ -67,9 +64,7 @@ install = server.shell(
             "sh",
         )
     ],
-    _if=lambda: not host.get_fact(
-        File, path=f"{PI_DIR}/install/managed-install.json"
-    ),
+    _if=lambda: not host.get_fact(File, path=f"{PI_DIR}/install/managed-install.json"),
     _timeout=900,
 )
 

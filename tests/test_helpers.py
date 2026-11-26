@@ -165,7 +165,9 @@ def test_config_settings_order_and_encoding():
     d = dict(s)
     assert ("compression.enabled", "true") in s
     assert ("terminal.backend", "local") in s
-    assert d["model.api_key"] == "${" + hermes_helpers.key_env_for(settings.BASE_URL) + "}"
+    assert (
+        d["model.api_key"] == "${" + hermes_helpers.key_env_for(settings.BASE_URL) + "}"
+    )
     prov = json.loads(d["providers"])["local-llama"]
     assert prov["models"] == {"ornith15": {"context_length": 262144}}
     assert json.loads(d["agent.max_turns"]) == 90
@@ -349,7 +351,10 @@ def test_port_free():
 
 def test_port_conflict_other_container_owns_port():
     cs = [
-        {"name": "a", "devices": {"dashboard": {"type": "proxy", "listen": "tcp:127.0.0.1:9119"}}}
+        {
+            "name": "a",
+            "devices": {"dashboard": {"type": "proxy", "listen": "tcp:127.0.0.1:9119"}},
+        }
     ]
     assert (
         helpers.port_conflict(cs, "b", 9119)
@@ -361,7 +366,10 @@ def test_port_conflict_own_proxy_is_not_a_conflict():
     # The regression: our own LXD proxy device holds the host port while the
     # container runs. A re-run must not treat that as a conflict.
     cs = [
-        {"name": "b", "devices": {"dashboard": {"type": "proxy", "listen": "tcp:127.0.0.1:9119"}}}
+        {
+            "name": "b",
+            "devices": {"dashboard": {"type": "proxy", "listen": "tcp:127.0.0.1:9119"}},
+        }
     ]
     assert helpers.port_conflict(cs, "b", 9119) is None
 
@@ -376,3 +384,14 @@ def test_port_conflict_host_listener_and_free_port():
     )
     s.close()
     assert helpers.port_conflict([], "b", port) is None
+
+
+def test_read_api_key_from_env(serve, monkeypatch):
+    monkeypatch.setenv("LLAMA_API_KEY", " k \n")
+    assert helpers.read_api_key(serve(["m"], 100), "m", 100) == "k"
+
+
+def test_read_api_key_rejects_before_preflight(monkeypatch):
+    monkeypatch.setenv("LLAMA_API_KEY", "a'b")
+    with pytest.raises(ValueError, match="quote"):
+        helpers.read_api_key("http://127.0.0.1:1/v1", "m", 100)

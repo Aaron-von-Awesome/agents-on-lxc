@@ -1,17 +1,51 @@
 """Settings shared by every ZeroClaw variant. A variant may reassign any of them after `from zeroclaw.defaults import *`."""
 
 RISK_LEVEL = "supervised"
-AUTO_APPROVE = ["shell", "file_read", "file_write", "file_edit", "glob_search", "content_search", "memory_recall", "memory_store"]
+AUTO_APPROVE = [
+    "shell",
+    "file_read",
+    "file_write",
+    "file_edit",
+    "glob_search",
+    "content_search",
+    "memory_recall",
+    "memory_store",
+]
 ALLOWED_COMMANDS = ["uname"]
 WEB_SEARCH_ENABLED = False
-ZEROCLAW_INSTALL_URL = "https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh"
+ZEROCLAW_INSTALL_URL = (
+    "https://raw.githubusercontent.com/zeroclaw-labs/zeroclaw/master/install.sh"
+)
 
 # Hardened minimum
-TOOLS_OPTIONAL = ["knowledge", "sop_list", "sop_execute", "sop_advance", "sop_approve", "sop_status", "sop_workshop"]
+TOOLS_OPTIONAL = [
+    "knowledge",
+    "sop_list",
+    "sop_execute",
+    "sop_advance",
+    "sop_approve",
+    "sop_status",
+    "sop_workshop",
+]
 ALLOWED_TOOLS = [
-    "shell", "file_read", "file_write", "file_edit", "glob_search", "content_search",
-    "memory_recall", "memory_store", "memory_forget", "web_fetch",
-    "knowledge", "sop_list", "sop_execute", "sop_advance", "sop_approve", "sop_status", "sop_workshop",
+    "content_search",
+    "file_edit",
+    "file_read",
+    "file_write",
+    "git_operations",
+    "glob_search",
+    "knowledge",
+    "memory_forget",
+    "memory_recall",
+    "memory_store",
+    "shell",
+    "sop_advance",
+    "sop_approve",
+    "sop_execute",
+    "sop_list",
+    "sop_status",
+    "sop_workshop",
+    "web_fetch",
 ]
 WORKSPACE_ONLY = True
 SKILL_CREATION = True

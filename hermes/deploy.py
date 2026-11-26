@@ -1,8 +1,6 @@
 """Stage 2: install and configure Hermes Agent in the container. Run on the LXD host."""
 
 import io
-import os
-from getpass import getpass
 
 from pyinfra import host
 from pyinfra.api import QuoteString, StringCommand
@@ -10,20 +8,29 @@ from pyinfra.facts.files import File
 from pyinfra.operations import files, server, systemd
 
 import settings
+from helpers import (
+    chat_test_wanted,
+    enable_linger,
+    read_api_key,
+    wait_for_url,
+)
 
 # Checked before the settings imports below: a zeroclaw variant has no CLAUDE_CODE.
 if settings.AGENT != "hermes":
     raise RuntimeError("hermes/deploy.py needs AGENT_VARIANT=hermes/<name>")
+if host.state.config.DIFF:
+    raise RuntimeError(
+        "--diff would print the API key file contents; re-run without --diff"
+    )
 
-from hermes.helpers import (  # noqa: E402
+from hermes.helpers import (
     config_settings,
     dashboard_unit,
     env_line,
     key_env_for,
     merge_env_command,
 )
-from helpers import chat_test_wanted, enable_linger, preflight, wait_for_url  # noqa: E402
-from settings import (  # noqa: E402
+from settings import (
     BASE_URL,
     CLAUDE_CODE,
     CLAUDE_CODE_INSTALL_URL,
@@ -42,13 +49,8 @@ HERMES = f"{HOME}/.local/bin/hermes"
 ENV = f"{HOME}/.hermes/.env"
 ENV_LLAMA = f"{HOME}/.hermes/.env.llama"
 
-if host.state.config.DIFF:
-    raise RuntimeError(
-        "--diff would print the API key file contents; re-run without --diff"
-    )
-api_key = (os.environ.get("LLAMA_API_KEY") or getpass("llama.cpp API key: ")).strip()
+api_key = read_api_key(BASE_URL, MODEL, CONTEXT_LENGTH)
 line = env_line(KEY_ENV, api_key)
-preflight(BASE_URL, MODEL, CONTEXT_LENGTH, api_key)
 
 files.directory(name="Create ~/.hermes", path=f"{HOME}/.hermes", mode="700")
 # Seeds only the essential hermes-agent skill instead of all bundled skills.

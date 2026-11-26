@@ -1,5 +1,6 @@
-from hermes.defaults import *
 from pathlib import Path
+
+from hermes.defaults import *
 
 # #################################################################################################
 # Shared settings come from hermes/defaults.py. To change one for this variant only, uncomment and edit:
@@ -16,9 +17,8 @@ from pathlib import Path
 CONTAINER = "hermius-maximus"
 IMAGE = "ubuntu:26.04"
 SSH_USER = "ubuntu"
-SSH_KEY_PATH = (
-    Path.home() / ".ssh/pyinfra/id_pyinfra"
-)  # no passphrase: pyinfra cannot prompt for one
+# no passphrase: pyinfra cannot prompt for one
+SSH_KEY_PATH = Path.home() / ".ssh/pyinfra/id_pyinfra"
 PUBKEY_PATH = SSH_KEY_PATH.with_name(SSH_KEY_PATH.name + ".pub")
 
 BASE_URL = "http://172.24.1.121:8080/v1"

@@ -14,12 +14,8 @@ AGENT_VARIANT=pi/pious-agenticus uv run pyinfra @local launch.py
 AGENT_VARIANT=pi/pious-agenticus uv run pyinfra inventory.py pi/deploy.py
 ```
 
-- `AGENT_VARIANT` is `<agent>/<name>`, a file in `<agent>/variants/` (without `.py`). For a new variant, copy a file and change `CONTAINER` and `DASHBOARD_PORT` (both must be unique across variants). `DASHBOARD_PORT` is needed only for agents with a dashboard (not Pi).
-- Stage 1 (`launch.py`) creates/starts the container and opens SSH + dashboard access, turns on LXD nesting (for Docker), and installs the Helix editor (classic snap) and the Docker snap, with `SSH_USER` in the `docker` group. Stage 2 (`<agent>/deploy.py`) installs and configures the agent over SSH.
-- Every deploy asks for the llama.cpp API key, or reads it from `LLAMA_API_KEY`.
-- Add `--dry` to preview the changes. Never add `--diff`: any deploy aborts rather than print the API-key file. Add `--data chat_test=true` to force the chat test.
-- Tests: `uv run pytest` (no LXD needed).
-- If stage 2 stops with an SSH host-key mismatch, clear the stale entry for the container IP: `ssh-keygen -R <container-ip>`.
+Operating rules, gotchas, recovery and ZeroClaw procedures live in
+[AGENTS.md](AGENTS.md) — read them before varying these commands.
 
 ## Hermes
 
@@ -38,34 +34,6 @@ AGENT_VARIANT=pi/pious-agenticus uv run pyinfra inventory.py pi/deploy.py
 - `PM_EXTRAS`: optional Hermes Python extras, installed with `hermes pm install --extra <name>`. Empty by default. Extras are install-wide, so every profile in the container gets them; `--profile` does not narrow that. Example: `PM_EXTRAS = ["anthropic"]` for a profile that uses the Anthropic provider. Removing a name does not uninstall it.
 - `MOA_ENABLED`: Mixture of Agents. Stage 2 points the `default` preset at the variant's `MODEL` (advisor and aggregator), replacing Hermes' cloud-model default. `False` (default) turns the advisors off, so selecting the preset runs `MODEL` alone.
 - `CLAUDE_CODE`: `True` runs the Claude Code installer (`CLAUDE_CODE_INSTALL_URL`) once, as `SSH_USER`, into `~/.local/bin/claude`. Off by default. Log in afterwards in the container with `claude`; turning it off does not uninstall it.
-
-## ZeroClaw
-
-Settings live in `zeroclaw/defaults.py`; a variant reassigns them after `from zeroclaw.defaults import *`.
-
-- `RISK_LEVEL`: `"supervised"`.
-- `AUTO_APPROVE`: `["shell", "file_read", "file_write", "file_edit", "glob_search", "content_search", "memory_recall", "memory_store"]`. Tools that run without asking; `workspace_only` still confines writes to the workspace.
-- `ALLOWED_COMMANDS`: `["uname"]`. Strict allow-list: the shell tool runs only these.
-- `WEB_SEARCH_ENABLED`: `False`.
-- The tool test (`zeroclaw agent` runs `uname -a`) passes only because of `AUTO_APPROVE` + `ALLOWED_COMMANDS`. Change either and it fails.
-
-Pair a browser (run in the container):
-
-```bash
-zeroclaw gateway get-paircode
-```
-
-Never set `require_pairing = false`.
-
-Logs:
-
-```bash
-journalctl --user -u zeroclaw
-```
-
-- Settings are applied via `zeroclaw config set` and restart the service, then stamped in `~/.zeroclaw/.deploy-settings`. Delete the stamp to force a re-apply and restart.
-- The API key is written only on the first run, to `~/.zeroclaw/config.toml` (mode 600). To rotate: delete `config.toml` (also drops browser pairings), or run `zeroclaw config set` interactively in the container, then `systemctl --user restart zeroclaw`.
-- A container previously deployed as Hermes on the same `DASHBOARD_PORT` still has `hermes-dashboard` holding the port; run `lxc delete --force <container>` before the first ZeroClaw deploy.
 
 ## Container can't reach the internet
 

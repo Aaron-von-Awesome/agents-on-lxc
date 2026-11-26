@@ -156,6 +156,7 @@ def snap_missing(name: str):
         return (
             subprocess.run(
                 ["lxc", "exec", CONTAINER, "--", "snap", "list", name],
+                check=False,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             ).returncode

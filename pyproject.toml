@@ -19,3 +19,6 @@ venv = ".venv"
 reportPrivateImportUsage = "warning"
 reportAttributeAccessIssue = "warning"
 reportArgumentType = "warning"
+
+[tool.ruff]
+extend-exclude = ["*.md"]

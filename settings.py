@@ -13,7 +13,7 @@ def _variant_literals(path: Path) -> dict[str, object]:
     # Read only literals: another variant with a broken import must not break this one.
     try:
         tree = ast.parse(path.read_text())
-    except (SyntaxError, ValueError):
+    except SyntaxError, ValueError:
         return {}
     out = {}
     for node in tree.body:
